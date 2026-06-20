@@ -1,8 +1,3 @@
-"""
-Test suite for Event Registration System API
-Run with: python test_api.py
-"""
-
 import json
 import os
 import sys
@@ -11,10 +6,7 @@ import unittest
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
-# Ensure we can import from parent dir
 sys.path.insert(0, os.path.dirname(__file__))
-
-# ── Use TestClient instead of a live server ──────
 
 from fastapi.testclient import TestClient
 from main import app, DATA_FILE
@@ -32,14 +24,8 @@ def past_date(days: int = 1) -> str:
 
 class BaseTest(unittest.TestCase):
     def setUp(self):
-        # Start every test with a clean slate
         if os.path.exists(DATA_FILE):
             os.remove(DATA_FILE)
-
-
-# ──────────────────────────────────────────────
-# 1. Create Event tests
-# ──────────────────────────────────────────────
 
 class TestCreateEvent(BaseTest):
 
@@ -88,11 +74,6 @@ class TestCreateEvent(BaseTest):
         })
         self.assertEqual(r.status_code, 422)
 
-
-# ──────────────────────────────────────────────
-# 2. View Events tests
-# ──────────────────────────────────────────────
-
 class TestViewEvents(BaseTest):
 
     def _create(self, name, seats=50, days=10):
@@ -120,7 +101,6 @@ class TestViewEvents(BaseTest):
         self.assertEqual(events[0]["name"], "Near Event")
 
     def test_upcoming_only_filter(self):
-        # Can only test with future events in this context
         self._create("Future Event", days=10)
         r = client.get("/events?upcoming_only=true")
         self.assertGreaterEqual(r.json()["count"], 1)
@@ -132,10 +112,6 @@ class TestViewEvents(BaseTest):
         self.assertEqual(r.json()["available_seats"], 4)
         self.assertEqual(r.json()["total_registrations"], 1)
 
-
-# ──────────────────────────────────────────────
-# 3. Register User tests
-# ──────────────────────────────────────────────
 
 class TestRegisterUser(BaseTest):
 
@@ -193,10 +169,6 @@ class TestRegisterUser(BaseTest):
         self.assertIn("registered_at", reg)
 
 
-# ──────────────────────────────────────────────
-# 4. Cancel Registration tests
-# ──────────────────────────────────────────────
-
 class TestCancelRegistration(BaseTest):
 
     def _setup(self, seats=5):
@@ -239,16 +211,7 @@ class TestCancelRegistration(BaseTest):
         """User who cancelled should be able to re-register"""
         eid, rid = self._setup(seats=5)
         client.delete(f"/registrations/{rid}")
-        # Re-register same user
         r = client.post("/registrations", json={"user_name": "Grace", "event_id": eid})
-        # Currently the API prevents re-registration after cancel;
-        # uncomment to enable and adjust business logic accordingly
-        # self.assertEqual(r.status_code, 201)
-
-
-# ──────────────────────────────────────────────
-# 5. Race-condition / concurrency test
-# ──────────────────────────────────────────────
 
 class TestConcurrency(BaseTest):
 
