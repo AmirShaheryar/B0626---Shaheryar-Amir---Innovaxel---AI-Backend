@@ -1,8 +1,3 @@
-"""
-Event Registration System API
-Innovaxel Backend Assessment – Summer Intern
-"""
-
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, field_validator
 from datetime import datetime
@@ -12,12 +7,9 @@ import json
 import os
 import uuid
 
-# ──────────────────────────────────────────────
-# Storage helpers (JSON-file persistence)
-# ──────────────────────────────────────────────
 
 DATA_FILE = "data.json"
-_lock = threading.Lock()          # prevents race conditions / overbooking
+_lock = threading.Lock()        
 
 
 def _load() -> dict:
@@ -31,16 +23,10 @@ def _save(data: dict) -> None:
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
-
-# ──────────────────────────────────────────────
-# Pydantic schemas
-# ──────────────────────────────────────────────
-
 class EventCreate(BaseModel):
     name: str
     total_seats: int
-    event_date: str          # ISO-8601  e.g. "2025-12-31T18:00:00"
-
+    event_date: str          
     @field_validator("name")
     @classmethod
     def name_not_empty(cls, v: str) -> str:
@@ -81,9 +67,6 @@ class RegistrationCreate(BaseModel):
         return v
 
 
-# ──────────────────────────────────────────────
-# FastAPI app
-# ──────────────────────────────────────────────
 
 app = FastAPI(
     title="Event Registration System",
@@ -92,7 +75,6 @@ app = FastAPI(
 )
 
 
-# ── 1. Create Event ────────────────────────────
 
 @app.post("/events", status_code=201, summary="Create a new event")
 def create_event(body: EventCreate):
@@ -121,8 +103,6 @@ def create_event(body: EventCreate):
     return {"message": "Event created successfully", "event_id": event_id}
 
 
-# ── 2. View Events ─────────────────────────────
-
 @app.get("/events", summary="List all events")
 def list_events(
     upcoming_only: bool = Query(False, description="Filter to future events only"),
@@ -148,9 +128,6 @@ def list_events(
 
     return {"events": events, "count": len(events)}
 
-
-# ── Get single event ───────────────────────────
-
 @app.get("/events/{event_id}", summary="Get event details")
 def get_event(event_id: str):
     data = _load()
@@ -164,12 +141,9 @@ def get_event(event_id: str):
     )
     return ev
 
-
-# ── 3. Register User for Event ─────────────────
-
 @app.post("/registrations", status_code=201, summary="Register a user for an event")
 def register_user(body: RegistrationCreate):
-    with _lock:                      # ← atomic: prevents double-booking
+    with _lock:                     
         data = _load()
 
         ev = data["events"].get(body.event_id)
@@ -187,17 +161,13 @@ def register_user(body: RegistrationCreate):
                         status_code=409,
                         detail="User is already registered for this event."
                     )
-                # If previously cancelled, allow re-registration (fall through)
                 break
 
-        # Seat availability check (re-read inside lock)
         if ev["available_seats"] <= 0:
             raise HTTPException(
                 status_code=409,
                 detail="No seats available. The event is full."
             )
-
-        # Create registration
         reg_id = str(uuid.uuid4())
         data["registrations"][reg_id] = {
             "id": reg_id,
@@ -210,9 +180,6 @@ def register_user(body: RegistrationCreate):
         _save(data)
 
     return {"message": "Registration successful", "registration_id": reg_id}
-
-
-# ── 4. Cancel Registration ─────────────────────
 
 @app.delete("/registrations/{registration_id}", summary="Cancel a registration")
 def cancel_registration(registration_id: str):
@@ -228,20 +195,14 @@ def cancel_registration(registration_id: str):
                 status_code=409,
                 detail="Registration is already cancelled."
             )
-
-        # Free the seat
         ev = data["events"].get(reg["event_id"])
         if ev:
             ev["available_seats"] = min(ev["available_seats"] + 1, ev["total_seats"])
-
         reg["status"] = "cancelled"
         reg["cancelled_at"] = datetime.now().isoformat()
         _save(data)
 
     return {"message": "Registration cancelled successfully"}
-
-
-# ── List registrations for an event ───────────
 
 @app.get("/events/{event_id}/registrations", summary="View active registrations for an event")
 def event_registrations(event_id: str):
